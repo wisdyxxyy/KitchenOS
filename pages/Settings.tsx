@@ -1,7 +1,7 @@
 
 import React, { useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Download, Upload, Trash2, Database, AlertTriangle, Cloud, CloudRain, RefreshCw, Key, Link2, Unlink, Copy, Check } from 'lucide-react';
+import { Download, Upload, Trash2, Database, AlertTriangle, Cloud, CloudRain, RefreshCw, Key, Link2, Unlink, Copy, Check, Info } from 'lucide-react';
 
 export const Settings: React.FC = () => {
   const { 
@@ -24,7 +24,9 @@ export const Settings: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [binId, setBinId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string|null>(null);
+  
+  // Feedback State
+  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
 
   // Manual Backup Handlers
@@ -73,38 +75,57 @@ export const Settings: React.FC = () => {
 
   // Cloud Sync Handlers
   const handleCreateBin = async () => {
-    if (!apiKey) {
-      setError("Please enter a JSONBin.io Master Key");
+    setNotification(null);
+    const cleanKey = apiKey.trim();
+    if (!cleanKey) {
+      setNotification({ type: 'error', message: "Please enter a JSONBin.io Master Key" });
       return;
     }
     setLoading(true);
-    setError(null);
     try {
-      const newBinId = await createSyncBin(apiKey);
-      saveSyncConfig(apiKey, newBinId);
+      const newBinId = await createSyncBin(cleanKey);
+      saveSyncConfig(cleanKey, newBinId);
+      setNotification({ type: 'success', message: "Cloud repository created and linked!" });
     } catch (e: any) {
-      setError(e.message);
+      setNotification({ type: 'error', message: e.message });
     } finally {
       setLoading(false);
     }
   };
 
   const handleLinkBin = () => {
-    if (!apiKey || !binId) {
-      setError("Please enter both API Key and Bin ID");
+    setNotification(null);
+    // Extract ID if full URL is pasted
+    let cleanBin = binId.trim();
+    if (cleanBin.includes('/b/')) {
+        cleanBin = cleanBin.split('/b/')[1].split('/')[0];
+    }
+    
+    const cleanKey = apiKey.trim();
+    
+    if (!cleanKey || !cleanBin) {
+      setNotification({ type: 'error', message: "Please enter both API Key and Bin ID" });
       return;
     }
-    saveSyncConfig(apiKey, binId);
+    
+    // Update local state to reflect cleaned version
+    setBinId(cleanBin);
+    setApiKey(cleanKey);
+    
+    saveSyncConfig(cleanKey, cleanBin);
+    setNotification({ type: 'success', message: "Device linked successfully." });
   };
 
   const handlePush = async () => {
     if (!confirm("Overwrite cloud data with local data? (Inventory quantities and Menu Plans are NOT synced)")) return;
     setLoading(true);
+    setNotification(null);
     try {
       await syncPush();
-      alert("Successfully pushed data to cloud.");
+      setNotification({ type: 'success', message: "Successfully pushed data to cloud." });
     } catch (e: any) {
-      alert("Push failed: " + e.message);
+      console.error(e);
+      setNotification({ type: 'error', message: "Push failed: " + e.message });
     } finally {
       setLoading(false);
     }
@@ -113,11 +134,13 @@ export const Settings: React.FC = () => {
   const handlePull = async () => {
     if (!confirm("Overwrite local recipes with cloud data? Local inventory stock levels and Menu Plans will be preserved.")) return;
     setLoading(true);
+    setNotification(null);
     try {
       await syncPull();
-      alert("Successfully pulled data from cloud.");
+      setNotification({ type: 'success', message: "Successfully pulled data from cloud." });
     } catch (e: any) {
-      alert("Pull failed: " + e.message);
+      console.error(e);
+      setNotification({ type: 'error', message: "Pull failed: " + e.message });
     } finally {
       setLoading(false);
     }
@@ -162,9 +185,9 @@ export const Settings: React.FC = () => {
                 </ol>
               </div>
 
-              {error && (
-                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
-                  <AlertTriangle size={16}/> {error}
+              {notification && notification.type === 'error' && (
+                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2 border border-red-100">
+                  <AlertTriangle size={16}/> {notification.message}
                 </div>
               )}
 
@@ -175,7 +198,7 @@ export const Settings: React.FC = () => {
                     <Key size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
                     <input 
                       type="password"
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                       placeholder="$2b$10$..."
                       value={apiKey}
                       onChange={e => setApiKey(e.target.value)}
@@ -201,7 +224,7 @@ export const Settings: React.FC = () => {
                      <p className="text-xs text-slate-500 mb-2">I have a Bin ID from another device.</p>
                      <input 
                         type="text"
-                        className="w-full px-3 py-2 mb-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        className="w-full px-3 py-2 mb-3 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                         placeholder="Bin ID (e.g. 65f...)"
                         value={binId}
                         onChange={e => setBinId(e.target.value)}
@@ -238,11 +261,20 @@ export const Settings: React.FC = () => {
                  </button>
                </div>
 
+               {notification && (
+                 <div className={`p-4 rounded-xl border flex items-center gap-3 animate-in fade-in slide-in-from-top-2 ${
+                   notification.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'
+                 }`}>
+                    {notification.type === 'success' ? <Check size={20} className="text-emerald-600"/> : <AlertTriangle size={20} className="text-red-600"/>}
+                    <span className="font-medium">{notification.message}</span>
+                 </div>
+               )}
+
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
                  <button 
                     onClick={handlePush}
                     disabled={loading}
-                    className="p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center gap-3 transition-colors disabled:opacity-50"
+                    className="p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center gap-3 transition-colors disabled:opacity-50 shadow-sm shadow-indigo-200"
                  >
                     {loading ? <RefreshCw size={20} className="animate-spin"/> : <Upload size={20} />}
                     <div className="text-left">
@@ -264,9 +296,10 @@ export const Settings: React.FC = () => {
                  </button>
                </div>
                
-               <p className="text-xs text-slate-500 italic">
-                 Note: Inventory <strong>quantities</strong> and <strong>Menu Plans</strong> are local-only and are not synced to the cloud. Recipe definitions are synced.
-               </p>
+               <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
+                 <Info size={14} className="mt-0.5 text-slate-400 shrink-0"/>
+                 <p>Note: Inventory <strong>quantities</strong> and <strong>Menu Plans</strong> are local-only and are NOT synced to the cloud. Only Ingredient definitions and Recipe details are synced.</p>
+               </div>
             </div>
           )}
         </div>

@@ -198,7 +198,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // --- Cloud Sync Logic ---
 
   const saveSyncConfig = (apiKey: string, binId: string) => {
-    setSyncConfig({ apiKey, binId });
+    setSyncConfig({ apiKey: apiKey.trim(), binId: binId.trim() });
   };
 
   const clearSyncConfig = () => {
