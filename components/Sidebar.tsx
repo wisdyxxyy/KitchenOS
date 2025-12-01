@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBasket, ChefHat, CalendarDays, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, ShoppingBasket, ChefHat, CalendarDays, BarChart3, Settings } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const Sidebar: React.FC = () => {
@@ -49,6 +50,12 @@ export const Sidebar: React.FC = () => {
           <BarChart3 size={20} />
           <span className="font-medium">Statistics</span>
         </NavLink>
+         <div className="pt-4 mt-4 border-t border-slate-100">
+           <NavLink to="/settings" className={navClass}>
+            <Settings size={20} />
+            <span className="font-medium">Settings</span>
+          </NavLink>
+        </div>
       </nav>
 
       <div className="p-4 border-t border-slate-100">

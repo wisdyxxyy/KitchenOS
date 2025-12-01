@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
@@ -7,6 +8,7 @@ import { Inventory } from './pages/Inventory';
 import { Recipes } from './pages/Recipes';
 import { MenuPlanner } from './pages/MenuPlanner';
 import { Statistics } from './pages/Statistics';
+import { Settings } from './pages/Settings';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
@@ -31,7 +33,8 @@ const App: React.FC = () => {
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/recipes" element={<Recipes />} />
             <Route path="/menu" element={<MenuPlanner />} />
-             <Route path="/stats" element={<Statistics />} />
+            <Route path="/stats" element={<Statistics />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

@@ -15,6 +15,9 @@ interface AppContextType {
   updateMenuPlan: (plan: MenuPlan) => void;
   getRecipeById: (id: string) => Recipe | undefined;
   checkLowStock: () => Ingredient[];
+  exportData: () => string;
+  importData: (jsonData: string) => boolean;
+  clearAllData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -115,6 +118,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return ingredients.filter(i => i.quantity <= i.lowStockThreshold && i.quantity > 0);
   };
 
+  const exportData = () => {
+    const data = {
+      ingredients,
+      recipes,
+      menuPlans,
+      version: 1,
+      exportDate: new Date().toISOString()
+    };
+    return JSON.stringify(data, null, 2);
+  };
+
+  const importData = (jsonData: string) => {
+    try {
+      const data = JSON.parse(jsonData);
+      // Basic validation
+      if (!Array.isArray(data.ingredients) || !Array.isArray(data.recipes)) {
+        console.error("Invalid data format: missing arrays");
+        return false;
+      }
+      
+      // Load data
+      setIngredients(data.ingredients);
+      setRecipes(data.recipes);
+      setMenuPlans(data.menuPlans || []);
+      return true;
+    } catch (e) {
+      console.error("Import failed:", e);
+      return false;
+    }
+  };
+
+  const clearAllData = () => {
+    setIngredients([]);
+    setRecipes([]);
+    setMenuPlans([]);
+    localStorage.removeItem(STORAGE_KEYS.INGREDIENTS);
+    localStorage.removeItem(STORAGE_KEYS.RECIPES);
+    localStorage.removeItem(STORAGE_KEYS.MENU);
+  };
+
   return (
     <AppContext.Provider value={{
       ingredients,
@@ -128,7 +171,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       deleteRecipe,
       updateMenuPlan,
       getRecipeById,
-      checkLowStock
+      checkLowStock,
+      exportData,
+      importData,
+      clearAllData
     }}>
       {children}
     </AppContext.Provider>
