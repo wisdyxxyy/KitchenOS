@@ -45,3 +45,9 @@ export interface SuggestionResult {
   reason: string;
   matchScore: number;
 }
+
+export interface SyncConfig {
+  apiKey: string;
+  binId: string;
+  lastSynced?: string;
+}
