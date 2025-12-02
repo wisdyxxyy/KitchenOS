@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { AlertTriangle, ChefHat, Calendar, ArrowRight, Plus } from 'lucide-react';
+import { AlertTriangle, ChefHat, Calendar, ArrowRight, Plus, BarChart3 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Recipe } from '../types';
 import { RecipeModal } from '../components/RecipeModal';
@@ -78,41 +79,41 @@ export const Dashboard: React.FC = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <Link to="/stats" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer block group">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-110 transition-transform">
               <ChefHat size={24} />
             </div>
             <div>
-              <p className="text-sm text-slate-500 font-medium">Total Recipes</p>
+              <p className="text-sm text-slate-500 font-medium flex items-center gap-1">Total Recipes <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity"/></p>
               <h3 className="text-2xl font-bold text-slate-800">{recipes.length}</h3>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <Link to="/inventory" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer block group">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl group-hover:scale-110 transition-transform">
               <AlertTriangle size={24} />
             </div>
             <div>
-              <p className="text-sm text-slate-500 font-medium">Low Stock</p>
+              <p className="text-sm text-slate-500 font-medium flex items-center gap-1">Low Stock <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity"/></p>
               <h3 className="text-2xl font-bold text-slate-800">{lowStockItems.length}</h3>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <Link to="/inventory" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer block group">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+            <div className="p-3 bg-red-50 text-red-600 rounded-xl group-hover:scale-110 transition-transform">
               <AlertTriangle size={24} />
             </div>
             <div>
-              <p className="text-sm text-slate-500 font-medium">Out of Stock</p>
+              <p className="text-sm text-slate-500 font-medium flex items-center gap-1">Out of Stock <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity"/></p>
               <h3 className="text-2xl font-bold text-slate-800">{outOfStockItems.length}</h3>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

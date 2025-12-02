@@ -3,6 +3,7 @@ import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
+import { MobileNav } from './components/MobileNav';
 import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
 import { Recipes } from './pages/Recipes';
@@ -18,7 +19,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <div className="flex min-h-screen bg-slate-50 relative">
       <Sidebar />
-      <main className="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto h-screen relative">
+      <main className="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto h-screen relative pb-24 md:pb-8">
         {dbError && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start gap-3 shadow-sm">
             <AlertTriangle className="flex-shrink-0 mt-0.5" size={20} />
@@ -35,6 +36,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           {children}
         </div>
       </main>
+      <MobileNav />
     </div>
   );
 };
