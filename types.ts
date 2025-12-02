@@ -1,6 +1,12 @@
 
 export type Unit = 'g' | 'kg' | 'ml' | 'l' | 'tsp' | 'tbsp' | 'cup' | 'pcs' | 'pack';
 
+export interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+}
+
 export interface Ingredient {
   id: string;
   name: string;
@@ -44,10 +50,4 @@ export interface SuggestionResult {
   recipeName: string;
   reason: string;
   matchScore: number;
-}
-
-export interface SyncConfig {
-  apiKey: string;
-  binId: string;
-  lastSynced?: string;
 }

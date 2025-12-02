@@ -1,6 +1,8 @@
+
 import React from 'react';
-import { Recipe } from '../types';
-import { X, Clock, Utensils, ChefHat, BookOpen, Edit2 } from 'lucide-react';
+import { Recipe, Ingredient } from '../types';
+import { X, Clock, Utensils, ChefHat, BookOpen, Edit2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 interface RecipeModalProps {
   recipe: Recipe | null;
@@ -9,7 +11,15 @@ interface RecipeModalProps {
 }
 
 export const RecipeModal: React.FC<RecipeModalProps> = ({ recipe, onClose, onEdit }) => {
+  const { ingredients } = useApp();
+
   if (!recipe) return null;
+
+  const getIngredientStatus = (recipeIngName: string) => {
+    const invItem = ingredients.find(i => i.name.trim().toLowerCase() === recipeIngName.trim().toLowerCase());
+    if (!invItem) return { hasStock: false, quantity: 0, unit: '' };
+    return { hasStock: invItem.quantity > 0, quantity: invItem.quantity, unit: invItem.unit };
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 z-50 flex justify-center items-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
@@ -56,15 +66,35 @@ export const RecipeModal: React.FC<RecipeModalProps> = ({ recipe, onClose, onEdi
           <div>
             <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-lg">
               <div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg"><ChefHat size={20}/></div>
-              Ingredients
+              Ingredients Check
             </h3>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {recipe.ingredients.map((ing, i) => (
-                <li key={i} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-100 rounded-xl">
-                  <span className="font-medium text-slate-700">{ing.name}</span>
-                  <span className="text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 text-sm">{ing.quantity}</span>
-                </li>
-              ))}
+            <ul className="grid grid-cols-1 gap-2">
+              {recipe.ingredients.map((ing, i) => {
+                const status = getIngredientStatus(ing.name);
+                return (
+                  <li key={i} className={`flex justify-between items-center p-3 border rounded-xl ${status.hasStock ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
+                    <div className="flex items-center gap-3">
+                       {status.hasStock ? (
+                         <CheckCircle2 size={18} className="text-emerald-500" />
+                       ) : (
+                         <AlertCircle size={18} className="text-red-400" />
+                       )}
+                       <div>
+                         <span className="font-medium text-slate-700 block">{ing.name}</span>
+                         <span className="text-xs text-slate-400">Recipe needs: {ing.quantity}</span>
+                       </div>
+                    </div>
+                    <div className="text-right">
+                       <span className={`text-sm font-bold ${status.hasStock ? 'text-emerald-700' : 'text-red-500'}`}>
+                         {status.hasStock ? 'Available' : 'Missing'}
+                       </span>
+                       {status.hasStock && (
+                         <div className="text-xs text-emerald-600/80">Stock: {status.quantity} {status.unit}</div>
+                       )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

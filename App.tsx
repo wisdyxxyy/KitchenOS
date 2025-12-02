@@ -9,6 +9,7 @@ import { Recipes } from './pages/Recipes';
 import { MenuPlanner } from './pages/MenuPlanner';
 import { Statistics } from './pages/Statistics';
 import { Settings } from './pages/Settings';
+import { AuthGuard } from './components/AuthGuard';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
@@ -29,12 +30,16 @@ const App: React.FC = () => {
       <HashRouter>
         <Layout>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/inventory" element={<Inventory />} />
-            <Route path="/recipes" element={<Recipes />} />
-            <Route path="/menu" element={<MenuPlanner />} />
-            <Route path="/stats" element={<Statistics />} />
+            {/* Login is on Settings page, so we allow access to it */}
             <Route path="/settings" element={<Settings />} />
+            
+            {/* Protected Routes */}
+            <Route path="/" element={<AuthGuard><Dashboard /></AuthGuard>} />
+            <Route path="/inventory" element={<AuthGuard><Inventory /></AuthGuard>} />
+            <Route path="/recipes" element={<AuthGuard><Recipes /></AuthGuard>} />
+            <Route path="/menu" element={<AuthGuard><MenuPlanner /></AuthGuard>} />
+            <Route path="/stats" element={<AuthGuard><Statistics /></AuthGuard>} />
+            
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Recipe, Ingredient } from '../types';
-import { Search, Filter, CheckCircle2, XCircle, Sparkles, Egg } from 'lucide-react';
+import { Search, Filter, CheckCircle2, XCircle, Sparkles, Egg, AlertCircle } from 'lucide-react';
 
 interface RecipePickerProps {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export const RecipePicker: React.FC<RecipePickerProps> = ({
     let foundCount = 0;
     recipe.ingredients.forEach(ri => {
       const exists = ingredients.some(i => 
-        i.name.toLowerCase().includes(ri.name.toLowerCase()) && i.quantity > 0
+        i.name.trim().toLowerCase() === ri.name.trim().toLowerCase() && i.quantity > 0
       );
       if (exists) foundCount++;
     });
@@ -38,6 +38,13 @@ export const RecipePicker: React.FC<RecipePickerProps> = ({
     if (foundCount === recipe.ingredients.length) return 'full';
     if (foundCount > 0) return 'partial';
     return 'missing';
+  };
+
+  const getIngredientStatus = (recipeIngName: string) => {
+    const invItem = ingredients.find(i => i.name.trim().toLowerCase() === recipeIngName.trim().toLowerCase());
+    if (!invItem) return { hasStock: false, text: 'Not in inventory' };
+    if (invItem.quantity <= 0) return { hasStock: false, text: 'Out of stock' };
+    return { hasStock: true, text: `${invItem.quantity} ${invItem.unit} in stock` };
   };
 
   const filteredRecipes = recipes.filter(r => {
@@ -102,7 +109,7 @@ export const RecipePicker: React.FC<RecipePickerProps> = ({
         </div>
 
         {/* List */}
-        <div className="overflow-y-auto p-4 grid grid-cols-1 gap-2 bg-slate-50/50 flex-1">
+        <div className="overflow-y-auto p-4 grid grid-cols-1 gap-3 bg-slate-50/50 flex-1">
           {filteredRecipes.map(recipe => {
             const status = checkAvailability(recipe);
             return (
@@ -111,15 +118,26 @@ export const RecipePicker: React.FC<RecipePickerProps> = ({
                 onClick={() => onSelect(recipe.id)}
                 className="text-left bg-white border border-slate-200 p-4 rounded-xl hover:border-emerald-500 hover:ring-1 hover:ring-emerald-500 transition-all group shadow-sm"
               >
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="font-bold text-slate-800 group-hover:text-emerald-700">{recipe.name}</h3>
-                  {status === 'full' && <CheckCircle2 size={18} className="text-emerald-500" />}
-                  {status === 'partial' && <div className="w-3 h-3 rounded-full bg-amber-400 mt-1" title="Partial ingredients" />}
-                  {status === 'missing' && <div className="w-3 h-3 rounded-full bg-red-400 mt-1" title="Missing ingredients" />}
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-bold text-slate-800 group-hover:text-emerald-700 text-lg">{recipe.name}</h3>
+                  {status === 'full' && <div className="flex items-center gap-1 text-emerald-600 text-xs font-bold bg-emerald-50 px-2 py-1 rounded-full"><CheckCircle2 size={14}/> Ready</div>}
+                  {status === 'partial' && <div className="flex items-center gap-1 text-amber-600 text-xs font-bold bg-amber-50 px-2 py-1 rounded-full"><AlertCircle size={14}/> Partial</div>}
+                  {status === 'missing' && <div className="flex items-center gap-1 text-red-500 text-xs font-bold bg-red-50 px-2 py-1 rounded-full"><XCircle size={14}/> Missing</div>}
                 </div>
-                <p className="text-xs text-slate-500 line-clamp-1">
-                  {recipe.ingredients.map(i => i.name).join(', ')}
-                </p>
+                
+                <div className="text-xs grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                  {recipe.ingredients.map((ing, idx) => {
+                     const stock = getIngredientStatus(ing.name);
+                     return (
+                       <div key={idx} className="flex justify-between items-center border-b border-slate-50 last:border-0 py-0.5">
+                          <span className={`${stock.hasStock ? 'text-slate-600' : 'text-slate-400'}`}>{ing.name}</span>
+                          <span className={`font-medium ${stock.hasStock ? 'text-emerald-600' : 'text-red-400'}`}>
+                            {stock.hasStock ? 'In Stock' : 'Missing'}
+                          </span>
+                       </div>
+                     );
+                  })}
+                </div>
               </button>
             );
           })}

@@ -1,33 +1,30 @@
 
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Download, Upload, Trash2, Database, AlertTriangle, Cloud, CloudRain, RefreshCw, Key, Link2, Unlink, Copy, Check, Info } from 'lucide-react';
+import { Download, Database, LogOut, User as UserIcon, AlertTriangle, Chrome, Copy, Check } from 'lucide-react';
+import { auth } from '../firebaseConfig';
 
 export const Settings: React.FC = () => {
   const { 
+    user,
+    login,
+    signup,
+    loginWithGoogle,
+    logout,
     exportData, 
-    importData, 
-    clearAllData, 
     ingredients, 
-    recipes,
-    syncConfig,
-    saveSyncConfig,
-    clearSyncConfig,
-    syncPush,
-    syncPull,
-    createSyncBin
+    recipes
   } = useApp();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Sync Form State
-  const [apiKey, setApiKey] = useState('');
-  const [binId, setBinId] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  // Feedback State
-  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
-  const [copySuccess, setCopySuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // More robust domain detection
+  const currentDomain = window.location.hostname || window.location.host || window.location.origin;
 
   // Manual Backup Handlers
   const handleDownload = () => {
@@ -44,338 +41,226 @@ export const Settings: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        if (confirm("Warning: Importing data will OVERWRITE recipes. Menu Plans are NOT imported. Inventory names will be merged, but stock quantities will NOT be overwritten (existing items keep their count, new items default to 0). Continue?")) {
-          const success = importData(content);
-          if (success) {
-            alert("Data imported successfully!");
-          } else {
-            alert("Failed to import data. Please check the file format.");
-          }
-        }
+  const handleGoogleLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/unauthorized-domain') {
+        const domainToWhitelist = window.location.hostname || window.location.host || window.location.href;
+        setError(`Domain not authorized. Please add "${domainToWhitelist}" to Firebase Console > Authentication > Settings > Authorized domains.`);
+      } else {
+        setError(err.message.replace('Firebase: ', ''));
       }
-    };
-    reader.readAsText(file);
-    // Reset input
-    e.target.value = '';
-  };
-
-  const handleClear = () => {
-    if (confirm("Are you absolutely sure you want to delete ALL data? This includes all recipes, inventory, and plans.")) {
-       clearAllData();
-    }
-  };
-
-  // Cloud Sync Handlers
-  const handleCreateBin = async () => {
-    setNotification(null);
-    const cleanKey = apiKey.trim();
-    if (!cleanKey) {
-      setNotification({ type: 'error', message: "Please enter a JSONBin.io Master Key" });
-      return;
-    }
-    setLoading(true);
-    try {
-      const newBinId = await createSyncBin(cleanKey);
-      saveSyncConfig(cleanKey, newBinId);
-      setNotification({ type: 'success', message: "Cloud repository created and linked!" });
-    } catch (e: any) {
-      setNotification({ type: 'error', message: e.message });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLinkBin = () => {
-    setNotification(null);
-    // Extract ID if full URL is pasted
-    let cleanBin = binId.trim();
-    if (cleanBin.includes('/b/')) {
-        cleanBin = cleanBin.split('/b/')[1].split('/')[0];
-    }
-    
-    const cleanKey = apiKey.trim();
-    
-    if (!cleanKey || !cleanBin) {
-      setNotification({ type: 'error', message: "Please enter both API Key and Bin ID" });
-      return;
-    }
-    
-    // Update local state to reflect cleaned version
-    setBinId(cleanBin);
-    setApiKey(cleanKey);
-    
-    saveSyncConfig(cleanKey, cleanBin);
-    setNotification({ type: 'success', message: "Device linked successfully." });
-  };
-
-  const handlePush = async () => {
-    if (!confirm("Overwrite cloud data with local data? (Inventory quantities and Menu Plans are NOT synced)")) return;
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
     setLoading(true);
-    setNotification(null);
     try {
-      await syncPush();
-      setNotification({ type: 'success', message: "Successfully pushed data to cloud." });
-    } catch (e: any) {
-      console.error(e);
-      setNotification({ type: 'error', message: "Push failed: " + e.message });
+      if (isRegistering) {
+        await signup(email, password);
+      } else {
+        await login(email, password);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message.replace('Firebase: ', ''));
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePull = async () => {
-    if (!confirm("Overwrite local recipes with cloud data? Local inventory stock levels and Menu Plans will be preserved.")) return;
-    setLoading(true);
-    setNotification(null);
-    try {
-      await syncPull();
-      setNotification({ type: 'success', message: "Successfully pulled data from cloud." });
-    } catch (e: any) {
-      console.error(e);
-      setNotification({ type: 'error', message: "Pull failed: " + e.message });
-    } finally {
-      setLoading(false);
-    }
+  const copyDomain = () => {
+    navigator.clipboard.writeText(currentDomain);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
-  };
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-md mx-auto">
+         <div className="bg-white p-8 rounded-2xl shadow-xl w-full border border-slate-100">
+           <div className="text-center mb-8">
+             <div className="bg-indigo-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <UserIcon size={32} className="text-indigo-600"/>
+             </div>
+             <h1 className="text-2xl font-bold text-slate-800">Welcome to KitchenOS</h1>
+             <p className="text-slate-500 mt-2">Sign in to sync your kitchen across all devices.</p>
+           </div>
+           
+           {error && (
+             <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 break-words">
+               <div className="flex items-start gap-2">
+                 <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+                 <span>{error}</span>
+               </div>
+             </div>
+           )}
+
+           <div className="space-y-4">
+             <button 
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full py-3 bg-white text-slate-700 font-bold rounded-xl border border-slate-300 hover:bg-slate-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 relative"
+             >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.26.81-.58z"
+                    fill="#FBBC05"
+                  />
+                  <path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </svg>
+                {loading ? 'Connecting...' : 'Continue with Google'}
+             </button>
+
+             {/* Domain Helper for Preview Environments */}
+             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-xs text-blue-800">
+                <p className="mb-1 font-bold">Having trouble logging in?</p>
+                <p className="mb-2 opacity-80">If you see an "Unauthorized Domain" error, add this domain to your Firebase Console:</p>
+                <div className="flex items-center gap-2 bg-white p-2 rounded border border-blue-200">
+                  <code className="flex-1 truncate select-all font-mono text-xs">{currentDomain}</code>
+                  <button onClick={copyDomain} className="text-blue-500 hover:text-blue-700 flex-shrink-0">
+                    {copied ? <Check size={14}/> : <Copy size={14}/>}
+                  </button>
+                </div>
+             </div>
+
+             <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase">Or use email</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+            </div>
+
+             <form onSubmit={handleAuth} className="space-y-4">
+               <div>
+                 <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                 <input 
+                   type="email" 
+                   required
+                   className="w-full p-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900"
+                   value={email}
+                   onChange={e => setEmail(e.target.value)}
+                   placeholder="chef@example.com"
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm font-bold text-slate-700 mb-1">Password</label>
+                 <input 
+                   type="password" 
+                   required
+                   minLength={6}
+                   className="w-full p-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-900"
+                   value={password}
+                   onChange={e => setPassword(e.target.value)}
+                   placeholder="••••••••"
+                 />
+               </div>
+               
+               <button 
+                 type="submit" 
+                 disabled={loading}
+                 className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 mt-2"
+               >
+                 {loading ? 'Processing...' : (isRegistering ? 'Create Account' : 'Sign In with Email')}
+               </button>
+             </form>
+
+             <div className="mt-4 text-center">
+               <button 
+                 onClick={() => setIsRegistering(!isRegistering)}
+                 className="text-sm text-indigo-600 font-medium hover:underline"
+               >
+                 {isRegistering ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
+               </button>
+             </div>
+           </div>
+         </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-10">
       <header>
-        <h1 className="text-3xl font-bold text-slate-800">Settings & Data</h1>
-        <p className="text-slate-500">Manage your application data, backups, and cloud synchronization.</p>
+        <h1 className="text-3xl font-bold text-slate-800">Settings</h1>
+        <p className="text-slate-500">Manage your account and data.</p>
       </header>
 
-      {/* Cloud Sync Section */}
+      {/* Account Section */}
       <section className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 bg-indigo-50/50">
+        <div className="p-6 border-b border-slate-100 bg-indigo-50/50 flex justify-between items-center">
           <div className="flex items-center gap-3">
              <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
-               <Cloud size={24} />
+               <UserIcon size={24} />
              </div>
              <div>
-               <h2 className="text-xl font-bold text-slate-800">Cloud Sync (JSONBin.io)</h2>
-               <p className="text-sm text-slate-500">Sync your recipes across devices without a server.</p>
+               <h2 className="text-xl font-bold text-slate-800">Account</h2>
+               <p className="text-sm text-slate-500">{user.email || user.displayName || 'User'}</p>
              </div>
           </div>
+          <button 
+            onClick={logout}
+            className="px-4 py-2 text-red-600 font-medium hover:bg-red-50 rounded-lg flex items-center gap-2 transition-colors"
+          >
+            <LogOut size={18} /> Sign Out
+          </button>
         </div>
-
+        
         <div className="p-6">
-          {!syncConfig ? (
-            <div className="space-y-6 max-w-2xl">
-              <div className="text-sm text-slate-600 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <p className="font-bold mb-2">How to setup sync:</p>
-                <ol className="list-decimal pl-5 space-y-1">
-                  <li>Go to <a href="https://jsonbin.io/app/keys" target="_blank" className="text-blue-600 underline" rel="noreferrer">JSONBin.io</a> and sign up (free).</li>
-                  <li>Copy your <strong>Master Key</strong> (X-Master-Key).</li>
-                  <li>Paste it below to create a new sync repository or link an existing one.</li>
-                </ol>
-              </div>
-
-              {notification && notification.type === 'error' && (
-                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2 border border-red-100">
-                  <AlertTriangle size={16}/> {notification.message}
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">JSONBin Master Key</label>
-                  <div className="relative">
-                    <Key size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                    <input 
-                      type="password"
-                      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
-                      placeholder="$2b$10$..."
-                      value={apiKey}
-                      onChange={e => setApiKey(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <h3 className="font-bold text-slate-800 mb-2">New Setup</h3>
-                    <p className="text-xs text-slate-500 mb-4">I want to upload my current data to a new cloud repository.</p>
-                    <button 
-                      onClick={handleCreateBin}
-                      disabled={loading}
-                      className="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 flex justify-center items-center gap-2"
-                    >
-                      {loading ? <RefreshCw size={16} className="animate-spin"/> : <CloudRain size={16}/>} Create & Sync
-                    </button>
-                  </div>
-
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                     <h3 className="font-bold text-slate-800 mb-2">Join Existing</h3>
-                     <p className="text-xs text-slate-500 mb-2">I have a Bin ID from another device.</p>
-                     <input 
-                        type="text"
-                        className="w-full px-3 py-2 mb-3 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
-                        placeholder="Bin ID (e.g. 65f...)"
-                        value={binId}
-                        onChange={e => setBinId(e.target.value)}
-                      />
-                     <button 
-                      onClick={handleLinkBin}
-                      className="w-full py-2 bg-white border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-100 flex justify-center items-center gap-2"
-                    >
-                      <Link2 size={16}/> Link Device
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                 <div>
-                   <div className="flex items-center gap-2">
-                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status</span>
-                     <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Connected</span>
-                   </div>
-                   <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-slate-500">Bin ID:</span>
-                      <code className="text-sm font-mono bg-white px-1 py-0.5 rounded border border-slate-200">{syncConfig.binId}</code>
-                      <button onClick={() => copyToClipboard(syncConfig.binId)} className="text-slate-400 hover:text-indigo-600" title="Copy ID">
-                        {copySuccess ? <Check size={14} className="text-emerald-500"/> : <Copy size={14}/>}
-                      </button>
-                   </div>
-                   <p className="text-xs text-slate-400 mt-1">Last synced: {syncConfig.lastSynced ? new Date(syncConfig.lastSynced).toLocaleString() : 'Never'}</p>
-                 </div>
-                 <button onClick={clearSyncConfig} className="text-xs text-red-500 hover:underline flex items-center gap-1">
-                   <Unlink size={12}/> Unlink Device
-                 </button>
-               </div>
-
-               {notification && (
-                 <div className={`p-4 rounded-xl border flex items-center gap-3 animate-in fade-in slide-in-from-top-2 ${
-                   notification.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'
-                 }`}>
-                    {notification.type === 'success' ? <Check size={20} className="text-emerald-600"/> : <AlertTriangle size={20} className="text-red-600"/>}
-                    <span className="font-medium">{notification.message}</span>
-                 </div>
-               )}
-
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-                 <button 
-                    onClick={handlePush}
-                    disabled={loading}
-                    className="p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center gap-3 transition-colors disabled:opacity-50 shadow-sm shadow-indigo-200"
-                 >
-                    {loading ? <RefreshCw size={20} className="animate-spin"/> : <Upload size={20} />}
-                    <div className="text-left">
-                      <div className="font-bold">Push to Cloud</div>
-                      <div className="text-xs opacity-80">Upload local changes</div>
-                    </div>
-                 </button>
-
-                 <button 
-                    onClick={handlePull}
-                    disabled={loading}
-                    className="p-4 bg-white border-2 border-indigo-600 text-indigo-700 hover:bg-indigo-50 rounded-xl flex items-center justify-center gap-3 transition-colors disabled:opacity-50"
-                 >
-                    {loading ? <RefreshCw size={20} className="animate-spin"/> : <Download size={20} />}
-                    <div className="text-left">
-                      <div className="font-bold">Pull from Cloud</div>
-                      <div className="text-xs opacity-80">Download remote data</div>
-                    </div>
-                 </button>
-               </div>
-               
-               <div className="flex items-start gap-2 text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
-                 <Info size={14} className="mt-0.5 text-slate-400 shrink-0"/>
-                 <p>Note: Inventory <strong>quantities</strong> and <strong>Menu Plans</strong> are local-only and are NOT synced to the cloud. Only Ingredient definitions and Recipe details are synced.</p>
-               </div>
-            </div>
-          )}
+           <div className="grid grid-cols-2 gap-4 text-sm">
+             <div className="p-4 bg-slate-50 rounded-xl">
+               <span className="block text-slate-400 text-xs uppercase font-bold mb-1">Recipes Synced</span>
+               <span className="text-2xl font-bold text-slate-800">{recipes.length}</span>
+             </div>
+             <div className="p-4 bg-slate-50 rounded-xl">
+               <span className="block text-slate-400 text-xs uppercase font-bold mb-1">Ingredients Synced</span>
+               <span className="text-2xl font-bold text-slate-800">{ingredients.length}</span>
+             </div>
+           </div>
+           <div className="mt-4 text-xs text-slate-400 bg-slate-50 p-2 rounded flex gap-2 items-center">
+             <Database size={12}/> All changes are automatically saved to the cloud (Firebase).
+           </div>
         </div>
       </section>
 
-      <div className="border-t border-slate-200 my-8"></div>
-
-      {/* Local File Backup Section */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-           <div className="flex items-center gap-3 mb-4">
-             <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-               <Database size={24} />
-             </div>
-             <div>
-               <h2 className="text-lg font-bold text-slate-800">Local Backup</h2>
-               <p className="text-sm text-slate-500">Download .json file</p>
-             </div>
-           </div>
-           
-           <button 
-             onClick={handleDownload}
-             className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
-           >
-             <Download size={18} /> Export to File
-           </button>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-           <div className="flex items-center gap-3 mb-4">
-             <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-               <Upload size={24} />
-             </div>
-             <div>
-               <h2 className="text-lg font-bold text-slate-800">Local Restore</h2>
-               <p className="text-sm text-slate-500">Upload .json file</p>
-             </div>
-           </div>
-
-           <button 
-             onClick={() => fileInputRef.current?.click()}
-             className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
-           >
-             <Upload size={18} /> Import File
-           </button>
-           <input 
-             type="file" 
-             ref={fileInputRef} 
-             className="hidden" 
-             accept=".json" 
-             onChange={handleUpload}
-           />
-        </div>
-      </section>
-
-      {/* Danger Zone */}
-      <div className="bg-red-50 p-6 rounded-2xl border border-red-100 mt-8">
+      {/* Export Section */}
+      <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
          <div className="flex items-center gap-3 mb-4">
-             <div className="p-2 bg-red-100 text-red-600 rounded-lg">
-               <AlertTriangle size={20} />
-             </div>
-             <h2 className="text-lg font-bold text-red-800">Danger Zone</h2>
-         </div>
-         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-           <div>
-             <p className="text-red-700 text-sm font-medium">Clear Application Data</p>
-             <p className="text-red-600/80 text-xs">Permanently remove {recipes.length} recipes and {ingredients.length} inventory items.</p>
+           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+             <Download size={24} />
            </div>
-           <button 
-             onClick={handleClear}
-             className="px-4 py-2 bg-white border border-red-200 text-red-600 hover:bg-red-100 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"
-           >
-             <Trash2 size={16} /> Reset All Data
-           </button>
+           <div>
+             <h2 className="text-lg font-bold text-slate-800">Export Data</h2>
+             <p className="text-sm text-slate-500">Download a snapshot of your recipes (Inventory quantities hidden).</p>
+           </div>
          </div>
-      </div>
+         
+         <button 
+           onClick={handleDownload}
+           className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
+         >
+           <Download size={18} /> Download JSON
+         </button>
+      </section>
     </div>
   );
 };

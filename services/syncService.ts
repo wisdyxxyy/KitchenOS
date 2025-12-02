@@ -1,5 +1,3 @@
-import { SyncConfig } from "../types";
-
 const BASE_URL = 'https://api.jsonbin.io/v3/b';
 
 const handleResponse = async (response: Response) => {

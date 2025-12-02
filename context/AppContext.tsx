@@ -1,13 +1,37 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Ingredient, Recipe, MenuPlan, SyncConfig } from '../types';
-import { createBin, readBin, updateBin } from '../services/syncService';
+import { Ingredient, Recipe, MenuPlan, User } from '../types';
+import { auth, db } from '../firebaseConfig';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot 
+} from 'firebase/firestore';
 
 interface AppContextType {
+  user: User | null;
+  loading: boolean;
   ingredients: Ingredient[];
   recipes: Recipe[];
   menuPlans: MenuPlan[];
-  syncConfig: SyncConfig | null;
+  
+  // Auth Methods
+  login: (email: string, pass: string) => Promise<void>;
+  signup: (email: string, pass: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+
+  // Data Methods
   addIngredient: (ing: Ingredient) => void;
   updateIngredient: (id: string, updates: Partial<Ingredient>) => void;
   deleteIngredient: (id: string) => void;
@@ -17,118 +41,154 @@ interface AppContextType {
   updateMenuPlan: (plan: MenuPlan) => void;
   getRecipeById: (id: string) => Recipe | undefined;
   checkLowStock: () => Ingredient[];
+  
+  // Legacy / Utility
   exportData: () => string;
-  importData: (jsonData: string) => boolean;
-  clearAllData: () => void;
-  saveSyncConfig: (apiKey: string, binId: string) => void;
-  clearSyncConfig: () => void;
-  syncPush: () => Promise<void>;
-  syncPull: () => Promise<void>;
-  createSyncBin: (apiKey: string) => Promise<string>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const STORAGE_KEYS = {
-  INGREDIENTS: 'skm_ingredients',
-  RECIPES: 'skm_recipes',
-  MENU: 'skm_menu',
-  SYNC: 'skm_sync_config'
-};
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [menuPlans, setMenuPlans] = useState<MenuPlan[]>([]);
-  const [syncConfig, setSyncConfig] = useState<SyncConfig | null>(null);
 
-  // Load from LocalStorage
+  // 1. Monitor Auth State
   useEffect(() => {
-    const savedIngredients = localStorage.getItem(STORAGE_KEYS.INGREDIENTS);
-    const savedRecipes = localStorage.getItem(STORAGE_KEYS.RECIPES);
-    const savedMenu = localStorage.getItem(STORAGE_KEYS.MENU);
-    const savedSync = localStorage.getItem(STORAGE_KEYS.SYNC);
-
-    if (savedIngredients) setIngredients(JSON.parse(savedIngredients));
-    if (savedRecipes) setRecipes(JSON.parse(savedRecipes));
-    if (savedSync) setSyncConfig(JSON.parse(savedSync));
-    
-    if (savedMenu) {
-      const parsed = JSON.parse(savedMenu);
-      // Migration: Convert single ID to Array if necessary (Handle legacy data)
-      const migratedMenu = parsed.map((p: any) => {
-        // Migrate old 'image' to 'dinnerImage' if 'dinnerImage' is empty
-        let dinnerImg = p.dinnerImage;
-        if (!dinnerImg && p.image) {
-          dinnerImg = p.image;
-        }
-
-        return {
-          date: p.date,
-          lunchRecipeIds: p.lunchRecipeIds || (p.lunchRecipeId ? [p.lunchRecipeId] : []),
-          dinnerRecipeIds: p.dinnerRecipeIds || (p.dinnerRecipeId ? [p.dinnerRecipeId] : []),
-          notes: p.notes,
-          lunchImage: p.lunchImage,
-          dinnerImage: dinnerImg
-        };
-      });
-      setMenuPlans(migratedMenu);
-    }
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName
+        });
+      } else {
+        setUser(null);
+        // Clear data on logout
+        setIngredients([]);
+        setRecipes([]);
+        setMenuPlans([]);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Save to LocalStorage
+  // 2. Subscribe to Firestore Collections when User is logged in
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.INGREDIENTS, JSON.stringify(ingredients));
-  }, [ingredients]);
+    if (!user) return;
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RECIPES, JSON.stringify(recipes));
-  }, [recipes]);
+    // Listeners using Modular SDK
+    const ingredientsRef = collection(db, 'users', user.uid, 'ingredients');
+    const recipesRef = collection(db, 'users', user.uid, 'recipes');
+    const menuRef = collection(db, 'users', user.uid, 'menuPlans');
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MENU, JSON.stringify(menuPlans));
-  }, [menuPlans]);
-  
-  useEffect(() => {
-    if (syncConfig) {
-      localStorage.setItem(STORAGE_KEYS.SYNC, JSON.stringify(syncConfig));
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.SYNC);
-    }
-  }, [syncConfig]);
-
-  const addIngredient = (ing: Ingredient) => {
-    setIngredients(prev => [...prev, ing]);
-  };
-
-  const updateIngredient = (id: string, updates: Partial<Ingredient>) => {
-    setIngredients(prev => prev.map(i => i.id === id ? { ...i, ...updates, updatedAt: new Date().toISOString() } : i));
-  };
-
-  const deleteIngredient = (id: string) => {
-    setIngredients(prev => prev.filter(i => i.id !== id));
-  };
-
-  const addRecipe = (recipe: Recipe) => {
-    setRecipes(prev => [...prev, recipe]);
-  };
-
-  const updateRecipe = (id: string, updates: Partial<Recipe>) => {
-    setRecipes(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-  };
-
-  const deleteRecipe = (id: string) => {
-    setRecipes(prev => prev.filter(r => r.id !== id));
-  };
-
-  const updateMenuPlan = (plan: MenuPlan) => {
-    setMenuPlans(prev => {
-      const existing = prev.find(p => p.date === plan.date);
-      if (existing) {
-        return prev.map(p => p.date === plan.date ? { ...p, ...plan } : p);
-      }
-      return [...prev, plan];
+    const unsubIngredients = onSnapshot(ingredientsRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ingredient));
+      setIngredients(data);
     });
+
+    const unsubRecipes = onSnapshot(recipesRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Recipe));
+      setRecipes(data);
+    });
+
+    const unsubMenu = onSnapshot(menuRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => {
+         const d = doc.data();
+         // Handle legacy format if any
+         let dinnerImg = d.dinnerImage;
+         if (!dinnerImg && d.image) dinnerImg = d.image;
+
+         return {
+           date: d.date,
+           lunchRecipeIds: d.lunchRecipeIds || (d.lunchRecipeId ? [d.lunchRecipeId] : []),
+           dinnerRecipeIds: d.dinnerRecipeIds || (d.dinnerRecipeId ? [d.dinnerRecipeId] : []),
+           notes: d.notes,
+           lunchImage: d.lunchImage,
+           dinnerImage: dinnerImg
+         } as MenuPlan;
+      });
+      setMenuPlans(data);
+    });
+
+    return () => {
+      unsubIngredients();
+      unsubRecipes();
+      unsubMenu();
+    };
+  }, [user]);
+
+  // --- Auth Wrappers ---
+  const login = async (email: string, pass: string) => {
+    await signInWithEmailAndPassword(auth, email, pass);
+  };
+
+  const signup = async (email: string, pass: string) => {
+    await createUserWithEmailAndPassword(auth, email, pass);
+  };
+
+  const loginWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+  };
+
+  // --- CRUD Methods (Modular SDK) ---
+
+  const addIngredient = async (ing: Ingredient) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'ingredients', ing.id), ing);
+    } catch (e) { console.error("Error adding ingredient", e); }
+  };
+
+  const updateIngredient = async (id: string, updates: Partial<Ingredient>) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'ingredients', id), updates, { merge: true });
+    } catch (e) { console.error("Error updating ingredient", e); }
+  };
+
+  const deleteIngredient = async (id: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'ingredients', id));
+    } catch (e) { console.error("Error deleting ingredient", e); }
+  };
+
+  const addRecipe = async (recipe: Recipe) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'recipes', recipe.id), recipe);
+    } catch (e) { console.error("Error adding recipe", e); }
+  };
+
+  const updateRecipe = async (id: string, updates: Partial<Recipe>) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'recipes', id), updates, { merge: true });
+    } catch (e) { console.error("Error updating recipe", e); }
+  };
+
+  const deleteRecipe = async (id: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'recipes', id));
+    } catch (e) { console.error("Error deleting recipe", e); }
+  };
+
+  const updateMenuPlan = async (plan: MenuPlan) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'menuPlans', plan.date), plan);
+    } catch (e) { console.error("Error updating menu", e); }
   };
 
   const getRecipeById = (id: string) => recipes.find(r => r.id === id);
@@ -137,10 +197,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return ingredients.filter(i => i.quantity <= i.lowStockThreshold && i.quantity > 0);
   };
 
-  // --- Import / Export Logic (Reused by Sync) ---
-
+  // --- Export Logic ---
   const exportData = () => {
-    // Export ingredients with quantity set to 0 to respect local inventory privacy/state
     const ingredientsExport = ingredients.map(i => ({
       ...i,
       quantity: 0
@@ -149,102 +207,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const data = {
       ingredients: ingredientsExport,
       recipes,
-      // menuPlans are NOT exported to keep them local
       version: 1,
       exportDate: new Date().toISOString()
     };
     return JSON.stringify(data, null, 2);
   };
 
-  const importData = (jsonData: string) => {
-    try {
-      const data = JSON.parse(jsonData);
-      // Basic validation
-      if (!Array.isArray(data.ingredients) || !Array.isArray(data.recipes)) {
-        console.error("Invalid data format: missing arrays");
-        return false;
-      }
-      
-      // Merge Ingredients: Preserve local quantities if item exists
-      // If item is new (not in local state), defaults to 0 (as per export or default)
-      const mergedIngredients = data.ingredients.map((importIng: Ingredient) => {
-        const existing = ingredients.find(i => i.id === importIng.id);
-        return {
-          ...importIng,
-          quantity: existing ? existing.quantity : 0
-        };
-      });
-      
-      // Load data
-      setIngredients(mergedIngredients);
-      setRecipes(data.recipes);
-      // menuPlans are NOT imported to preserve local schedule
-      return true;
-    } catch (e) {
-      console.error("Import failed:", e);
-      return false;
-    }
-  };
-
-  const clearAllData = () => {
-    setIngredients([]);
-    setRecipes([]);
-    setMenuPlans([]);
-    localStorage.removeItem(STORAGE_KEYS.INGREDIENTS);
-    localStorage.removeItem(STORAGE_KEYS.RECIPES);
-    localStorage.removeItem(STORAGE_KEYS.MENU);
-  };
-
-  // --- Cloud Sync Logic ---
-
-  const saveSyncConfig = (apiKey: string, binId: string) => {
-    setSyncConfig({ apiKey: apiKey.trim(), binId: binId.trim() });
-  };
-
-  const clearSyncConfig = () => {
-    setSyncConfig(null);
-  };
-
-  const syncPush = async () => {
-    if (!syncConfig) throw new Error("Sync not configured");
-    
-    // Use exportData logic to ensure quantities and menuPlans are excluded
-    const jsonString = exportData();
-    const data = JSON.parse(jsonString);
-
-    await updateBin(syncConfig.binId, syncConfig.apiKey, data);
-    
-    setSyncConfig(prev => prev ? { ...prev, lastSynced: new Date().toISOString() } : null);
-  };
-
-  const syncPull = async () => {
-    if (!syncConfig) throw new Error("Sync not configured");
-    
-    const response = await readBin(syncConfig.binId, syncConfig.apiKey);
-    
-    // JSONBin returns data wrapped in 'record'
-    if (response.record) {
-      // Use importData logic to ensure local quantities and menuPlans are preserved
-      importData(JSON.stringify(response.record));
-      setSyncConfig(prev => prev ? { ...prev, lastSynced: new Date().toISOString() } : null);
-    }
-  };
-
-  const createSyncBin = async (apiKey: string): Promise<string> => {
-     // Create initial bin with current data (sanitized)
-     const jsonString = exportData();
-     const data = JSON.parse(jsonString);
-     
-     const response = await createBin(apiKey, data);
-     return response.metadata.id;
-  };
-
   return (
     <AppContext.Provider value={{
+      user,
+      loading,
       ingredients,
       recipes,
       menuPlans,
-      syncConfig,
+      login,
+      signup,
+      loginWithGoogle,
+      logout,
       addIngredient,
       updateIngredient,
       deleteIngredient,
@@ -254,14 +233,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updateMenuPlan,
       getRecipeById,
       checkLowStock,
-      exportData,
-      importData,
-      clearAllData,
-      saveSyncConfig,
-      clearSyncConfig,
-      syncPush,
-      syncPull,
-      createSyncBin
+      exportData
     }}>
       {children}
     </AppContext.Provider>

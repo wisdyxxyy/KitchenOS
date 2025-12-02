@@ -120,7 +120,7 @@ export const MenuPlanner: React.FC = () => {
                type="file" 
                className="hidden" 
                accept="image/*"
-               ref={el => fileInputRef.current[`${dateStr}-${type}`] = el}
+               ref={el => { fileInputRef.current[`${dateStr}-${type}`] = el; }}
                onChange={(e) => handleMealImageUpload(dateStr, type, e)}
             />
             <button 
