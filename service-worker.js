@@ -1,8 +1,8 @@
-const CACHE_NAME = 'kitchen-os-v2';
+const CACHE_NAME = 'kitchen-os-v4';
 const urlsToCache = [
-  './',
-  './index.html',
-  './manifest.json'
+  '/',
+  '/index.html',
+  '/manifest.json'
 ];
 
 // Install SW
@@ -46,10 +46,10 @@ self.addEventListener('fetch', (event) => {
   // SPA Navigation Handler: If it's a navigation request (HTML), serve index.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('./index.html').then((response) => {
-        return response || fetch(event.request);
-      }).catch(() => {
-        return fetch(event.request);
+      caches.match('/index.html').then((response) => {
+        // Return cache if found, otherwise fall back to network
+        // If network fails (offline), return index.html again (App Shell pattern)
+        return response || fetch(event.request).catch(() => caches.match('/index.html'));
       })
     );
     return;
