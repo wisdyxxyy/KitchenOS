@@ -2,20 +2,60 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { FIREBASE_KEYS } from "./keys";
 
-// TODO: Replace with your actual Firebase project configuration
+// Determine if we are using Vite (import.meta.env) or standard process.env
+const getEnv = (key: string) => {
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+    return (import.meta as any).env[key];
+  }
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key];
+  }
+  return undefined;
+};
+
+// --- CONFIGURATION ---
+// 1. Try to load from Environment Variables (Best for Vercel/GitHub)
+const envConfig = {
+  apiKey: getEnv("VITE_FIREBASE_API_KEY"),
+  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN"),
+  projectId: getEnv("VITE_FIREBASE_PROJECT_ID"),
+  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET"),
+  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID"),
+  appId: getEnv("VITE_FIREBASE_APP_ID")
+};
+
+// 2. Manual Fallback using keys.ts
+const manualConfig = FIREBASE_KEYS;
+
+// Select config: Env vars take precedence, then keys.ts
 const firebaseConfig = {
-  apiKey: "AIzaSyC3jgYXE8wifTe_SCooOA6Ghn9Jp8wxo0w",
-  authDomain: "smartkitchen-e27e7.firebaseapp.com",
-  projectId: "smartkitchen-e27e7",
-  storageBucket: "smartkitchen-e27e7.firebasestorage.app",
-  messagingSenderId: "48066300532",
-  appId: "1:48066300532:web:a00a1f380863f882769f21"
+  apiKey: envConfig.apiKey || manualConfig.apiKey,
+  authDomain: envConfig.authDomain || manualConfig.authDomain,
+  projectId: envConfig.projectId || manualConfig.projectId,
+  storageBucket: envConfig.storageBucket || manualConfig.storageBucket,
+  messagingSenderId: envConfig.messagingSenderId || manualConfig.messagingSenderId,
+  appId: envConfig.appId || manualConfig.appId
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+let app: any;
+let auth: any;
+let db: any;
 
+try {
+  if (!firebaseConfig.apiKey) {
+    console.error("Firebase Config Missing. Please edit keys.ts and fill in your keys.");
+    // We don't throw immediately to allow the UI to render the error banner
+  } else {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  }
+} catch (error) {
+  console.error("Firebase Initialization Error:", error);
+}
+
+export { auth, db };
 export default app;

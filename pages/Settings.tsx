@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Download, Database, LogOut, User as UserIcon, AlertTriangle, Chrome, Copy, Check } from 'lucide-react';
 import { auth } from '../firebaseConfig';
@@ -22,9 +22,34 @@ export const Settings: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [domainToWhitelist, setDomainToWhitelist] = useState('');
 
-  // More robust domain detection
-  const currentDomain = window.location.hostname || window.location.host || window.location.origin;
+  // Robust domain extraction logic for blob/preview environments
+  useEffect(() => {
+    try {
+      const href = window.location.href;
+      let hostname = window.location.hostname;
+
+      // If running inside a blob URL (common in previewers), hostname might be empty or misleading
+      if (!hostname || href.startsWith('blob:')) {
+        // Try to construct a URL object from the inner part if it's a blob
+        const cleanUrl = href.replace(/^blob:/, '');
+        try {
+          const urlObj = new URL(cleanUrl);
+          hostname = urlObj.hostname;
+        } catch (e) {
+          // Fallback regex if URL parsing fails
+          const match = cleanUrl.match(/:\/\/(.[^/]+)/);
+          if (match && match[1]) {
+            hostname = match[1];
+          }
+        }
+      }
+      setDomainToWhitelist(hostname);
+    } catch (e) {
+      setDomainToWhitelist('Could not detect domain');
+    }
+  }, []);
 
   // Manual Backup Handlers
   const handleDownload = () => {
@@ -49,8 +74,7 @@ export const Settings: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/unauthorized-domain') {
-        const domainToWhitelist = window.location.hostname || window.location.host || window.location.href;
-        setError(`Domain not authorized. Please add "${domainToWhitelist}" to Firebase Console > Authentication > Settings > Authorized domains.`);
+        setError(`Domain not authorized. Please check the "Firebase Configuration Help" box below.`);
       } else if (err.code === 'auth/popup-closed-by-user') {
         setError('Login cancelled.');
       } else if (err.code === 'auth/operation-not-allowed') {
@@ -92,7 +116,7 @@ export const Settings: React.FC = () => {
   };
 
   const copyDomain = () => {
-    navigator.clipboard.writeText(currentDomain);
+    navigator.clipboard.writeText(domainToWhitelist);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -148,14 +172,17 @@ export const Settings: React.FC = () => {
 
              {/* Domain Helper for Preview Environments */}
              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-xs text-blue-800">
-                <p className="mb-1 font-bold">Having trouble logging in?</p>
-                <p className="mb-2 opacity-80">If you see an "Unauthorized Domain" error, add this domain to your Firebase Console:</p>
+                <p className="mb-1 font-bold">Firebase Configuration Help</p>
+                <p className="mb-2 opacity-80">If you get an "Unauthorized Domain" error, please copy the domain below and add it to <span className="font-semibold">Firebase Console {'>'} Authentication {'>'} Settings {'>'} Authorized domains</span>.</p>
                 <div className="flex items-center gap-2 bg-white p-2 rounded border border-blue-200">
-                  <code className="flex-1 truncate select-all font-mono text-xs">{currentDomain}</code>
-                  <button onClick={copyDomain} className="text-blue-500 hover:text-blue-700 flex-shrink-0">
+                  <code className="flex-1 truncate select-all font-mono text-xs font-bold text-slate-700">{domainToWhitelist}</code>
+                  <button onClick={copyDomain} className="text-blue-500 hover:text-blue-700 flex-shrink-0" title="Copy">
                     {copied ? <Check size={14}/> : <Copy size={14}/>}
                   </button>
                 </div>
+                <p className="mt-2 text-[10px] text-slate-500 italic">
+                  Note: Do not include "blob:", "https://" or paths. Just the domain.
+                </p>
              </div>
 
              <div className="relative flex py-2 items-center">
