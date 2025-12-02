@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Recipe, RecipeIngredient } from '../types';
-import { Plus, Trash2, Edit2, Wand2, Loader2, Save, X, ChefHat, Search, Filter, ChevronDown, Check, Image as ImageIcon, Upload, Egg, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Wand2, Loader2, Save, X, ChefHat, Search, Filter, ChevronDown, Check, Image as ImageIcon, Upload, Egg, AlertCircle, Sparkles } from 'lucide-react';
 import { parseRecipeFromText } from '../services/geminiService';
 import { v4 as uuidv4 } from 'uuid';
 import { RecipeModal } from '../components/RecipeModal';
@@ -13,8 +14,11 @@ export const Recipes: React.FC = () => {
   const location = useLocation();
 
   const [isEditing, setIsEditing] = useState(false);
+  
+  // AI Modal State
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
-  const [parseText, setParseText] = useState('');
   
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,13 +83,26 @@ export const Recipes: React.FC = () => {
     return matchesSearch && matchesTag && matchesIngredient;
   });
 
-  const handleAiParse = async () => {
-    if (!parseText) return;
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return;
     setLoadingAi(true);
-    const result = await parseRecipeFromText(parseText);
+    const result = await parseRecipeFromText(aiPrompt);
     setLoadingAi(false);
+    
     if (result) {
-      setCurrentRecipe({ ...result, tags: result.tags || [], ingredients: result.ingredients || [] });
+      setCurrentRecipe({ 
+        id: '', // Will be assigned on save
+        name: result.name || '',
+        ingredients: result.ingredients || [],
+        steps: result.steps || [],
+        tags: result.tags || [],
+        prepTime: result.prepTime || '30 min',
+        description: result.description || '',
+        image: '' 
+      });
+      setShowAiModal(false);
+      setAiPrompt('');
+      setIsEditing(true);
     }
   };
 
@@ -109,8 +126,6 @@ export const Recipes: React.FC = () => {
     }
 
     // 1. Auto-create missing ingredients in Inventory
-    // We use a simple loop, but ideally we should wait for promises. 
-    // However, Firestore writes are async/optimistic.
     for (const recipeIng of (currentRecipe.ingredients || [])) {
       const rawName = recipeIng.name.trim();
       if (!rawName) continue;
@@ -119,16 +134,15 @@ export const Recipes: React.FC = () => {
       const exists = ingredients.some(invIng => invIng.name.toLowerCase() === rawName.toLowerCase());
 
       if (!exists) {
-        // Add new ingredient to inventory with default values
         try {
           await addIngredient({
             id: uuidv4(),
             name: rawName.charAt(0).toUpperCase() + rawName.slice(1), // Capitalize
-            quantity: 0, // Default to 0 stock
+            quantity: 0,
             unit: 'pcs',
             category: 'other',
             lowStockThreshold: 1,
-            showInRestockList: true, // Default to showing in restock list
+            showInRestockList: true,
             updatedAt: new Date().toISOString()
           });
         } catch (e) {
@@ -169,7 +183,6 @@ export const Recipes: React.FC = () => {
 
   const resetForm = () => {
     setCurrentRecipe({ name: '', ingredients: [], steps: [], tags: [], image: '' });
-    setParseText('');
   };
 
   const startEditing = (recipe: Recipe) => {
@@ -205,14 +218,58 @@ export const Recipes: React.FC = () => {
           <p className="text-slate-500">Manage your favorite dishes and cooking procedures.</p>
         </div>
         {!isEditing && (
-          <button 
-            onClick={() => { resetForm(); setIsEditing(true); }}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm"
-          >
-            <Plus size={20} /> Add Recipe
-          </button>
+          <div className="flex gap-2">
+             <button 
+              onClick={() => setShowAiModal(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm"
+            >
+              <Sparkles size={20} /> AI Chef
+            </button>
+            <button 
+              onClick={() => { resetForm(); setIsEditing(true); }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-colors shadow-sm"
+            >
+              <Plus size={20} /> Add Recipe
+            </button>
+          </div>
         )}
       </header>
+
+      {/* AI Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+             <div className="bg-indigo-600 p-6 text-white flex justify-between items-start">
+               <div>
+                 <h3 className="text-xl font-bold flex items-center gap-2"><Sparkles size={20}/> AI Chef Assistant</h3>
+                 <p className="text-indigo-100 text-sm mt-1">Generate a recipe from a name or parse text.</p>
+               </div>
+               <button onClick={() => setShowAiModal(false)} className="text-indigo-200 hover:text-white"><X size={24}/></button>
+             </div>
+             
+             <div className="p-6">
+               <textarea 
+                  className="w-full p-4 border border-slate-300 rounded-xl text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all resize-none mb-4"
+                  rows={6}
+                  placeholder="Examples:&#10;- 'Spaghetti Bolognese' (I'll generate the recipe)&#10;- Paste a full recipe text here..."
+                  value={aiPrompt}
+                  onChange={e => setAiPrompt(e.target.value)}
+               ></textarea>
+               
+               <div className="flex justify-end gap-3">
+                 <button onClick={() => setShowAiModal(false)} className="px-4 py-2 text-slate-500 hover:text-slate-800 font-medium">Cancel</button>
+                 <button 
+                   onClick={handleAiGenerate} 
+                   disabled={loadingAi || !aiPrompt.trim()}
+                   className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                 >
+                   {loadingAi ? <Loader2 size={18} className="animate-spin" /> : <><Wand2 size={18} /> Generate</>}
+                 </button>
+               </div>
+             </div>
+          </div>
+        </div>
+      )}
 
       <RecipeModal 
         recipe={viewingRecipe} 
@@ -266,29 +323,6 @@ export const Recipes: React.FC = () => {
                    </button>
                 )}
                </div>
-
-              {/* AI Parser */}
-              {!currentRecipe.id && (
-                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                  <label className="block text-sm font-bold text-indigo-800 mb-2 flex items-center gap-2">
-                    <Wand2 size={16} /> AI Quick Import
-                  </label>
-                  <textarea 
-                    className="w-full p-3 rounded-lg border-indigo-200 focus:ring-2 focus:ring-indigo-400 text-sm bg-white text-slate-900 placeholder:text-slate-400"
-                    rows={3}
-                    placeholder="Paste any text here... e.g. 'Spaghetti Carbonara: 2 eggs, 100g pancetta, 200g pasta. Fry pancetta, mix eggs...'"
-                    value={parseText}
-                    onChange={e => setParseText(e.target.value)}
-                  ></textarea>
-                  <button 
-                    onClick={handleAiParse}
-                    disabled={loadingAi}
-                    className="mt-2 text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {loadingAi ? <Loader2 size={14} className="animate-spin" /> : 'Parse with AI'}
-                  </button>
-                </div>
-              )}
 
               <div>
                 <label className="label text-slate-700 font-medium mb-1 block">Recipe Name</label>

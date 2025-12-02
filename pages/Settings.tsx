@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Download, Database, LogOut, User as UserIcon, AlertTriangle, Chrome, Copy, Check } from 'lucide-react';
 import { auth } from '../firebaseConfig';
+import { useNavigate } from 'react-router-dom';
 
 export const Settings: React.FC = () => {
   const { 
@@ -15,6 +16,7 @@ export const Settings: React.FC = () => {
     ingredients, 
     recipes
   } = useApp();
+  const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -71,6 +73,7 @@ export const Settings: React.FC = () => {
     setLoading(true);
     try {
       await loginWithGoogle();
+      navigate('/'); // Redirect to dashboard after success
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/unauthorized-domain') {
@@ -97,6 +100,7 @@ export const Settings: React.FC = () => {
       } else {
         await login(email, password);
       }
+      navigate('/'); // Redirect to dashboard after success
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
