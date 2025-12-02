@@ -101,7 +101,7 @@ export const Recipes: React.FC = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!currentRecipe.name) return;
 
     if (isDuplicateName) {
@@ -109,26 +109,33 @@ export const Recipes: React.FC = () => {
     }
 
     // 1. Auto-create missing ingredients in Inventory
-    currentRecipe.ingredients?.forEach(recipeIng => {
+    // We use a simple loop, but ideally we should wait for promises. 
+    // However, Firestore writes are async/optimistic.
+    for (const recipeIng of (currentRecipe.ingredients || [])) {
       const rawName = recipeIng.name.trim();
-      if (!rawName) return;
+      if (!rawName) continue;
 
       // Check existence case-insensitively
       const exists = ingredients.some(invIng => invIng.name.toLowerCase() === rawName.toLowerCase());
 
       if (!exists) {
         // Add new ingredient to inventory with default values
-        addIngredient({
-          id: uuidv4(),
-          name: rawName.charAt(0).toUpperCase() + rawName.slice(1), // Capitalize
-          quantity: 0, // Default to 0 stock
-          unit: 'pcs',
-          category: 'other',
-          lowStockThreshold: 1,
-          updatedAt: new Date().toISOString()
-        });
+        try {
+          await addIngredient({
+            id: uuidv4(),
+            name: rawName.charAt(0).toUpperCase() + rawName.slice(1), // Capitalize
+            quantity: 0, // Default to 0 stock
+            unit: 'pcs',
+            category: 'other',
+            lowStockThreshold: 1,
+            showInRestockList: true, // Default to showing in restock list
+            updatedAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.error("Failed to auto-create ingredient", e);
+        }
       }
-    });
+    }
     
     // 2. Save Recipe
     const recipeData = {
@@ -141,20 +148,23 @@ export const Recipes: React.FC = () => {
          image: currentRecipe.image
     };
 
-    if (currentRecipe.id) {
-       // Update existing
-       updateRecipe(currentRecipe.id, recipeData);
-    } else {
-      // Add new
-      const newRecipe: Recipe = {
-        id: uuidv4(),
-        ...recipeData
-      };
-      addRecipe(newRecipe);
+    try {
+      if (currentRecipe.id) {
+         // Update existing
+         await updateRecipe(currentRecipe.id, recipeData);
+      } else {
+        // Add new
+        const newRecipe: Recipe = {
+          id: uuidv4(),
+          ...recipeData
+        };
+        await addRecipe(newRecipe);
+      }
+      setIsEditing(false);
+      resetForm();
+    } catch (error) {
+       // Global error handler in AppContext/App.tsx will catch db errors if strict rules
     }
-    
-    setIsEditing(false);
-    resetForm();
   };
 
   const resetForm = () => {

@@ -21,6 +21,7 @@ import {
 interface AppContextType {
   user: User | null;
   loading: boolean;
+  dbError: string | null; // New global error state
   ingredients: Ingredient[];
   recipes: Recipe[];
   menuPlans: MenuPlan[];
@@ -32,13 +33,13 @@ interface AppContextType {
   logout: () => Promise<void>;
 
   // Data Methods
-  addIngredient: (ing: Ingredient) => void;
-  updateIngredient: (id: string, updates: Partial<Ingredient>) => void;
-  deleteIngredient: (id: string) => void;
-  addRecipe: (recipe: Recipe) => void;
-  updateRecipe: (id: string, updates: Partial<Recipe>) => void;
-  deleteRecipe: (id: string) => void;
-  updateMenuPlan: (plan: MenuPlan) => void;
+  addIngredient: (ing: Ingredient) => Promise<void>;
+  updateIngredient: (id: string, updates: Partial<Ingredient>) => Promise<void>;
+  deleteIngredient: (id: string) => Promise<void>;
+  addRecipe: (recipe: Recipe) => Promise<void>;
+  updateRecipe: (id: string, updates: Partial<Recipe>) => Promise<void>;
+  deleteRecipe: (id: string) => Promise<void>;
+  updateMenuPlan: (plan: MenuPlan) => Promise<void>;
   getRecipeById: (id: string) => Recipe | undefined;
   checkLowStock: () => Ingredient[];
   
@@ -51,6 +52,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
   
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -65,12 +67,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           email: firebaseUser.email,
           displayName: firebaseUser.displayName
         });
+        setDbError(null);
       } else {
         setUser(null);
         // Clear data on logout
         setIngredients([]);
         setRecipes([]);
         setMenuPlans([]);
+        setDbError(null);
       }
       setLoading(false);
     });
@@ -86,17 +90,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const recipesRef = collection(db, 'users', user.uid, 'recipes');
     const menuRef = collection(db, 'users', user.uid, 'menuPlans');
 
+    const handleSnapshotError = (error: any) => {
+      console.error("Firestore Listener Error:", error);
+      if (error.code === 'permission-denied') {
+        setDbError("Database permission denied. Please update Firebase Rules in the Console.");
+      } else {
+        setDbError(`Database Error: ${error.message}`);
+      }
+    };
+
     const unsubIngredients = onSnapshot(ingredientsRef, (snapshot) => {
+      setDbError(null);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ingredient));
       setIngredients(data);
-    });
+    }, handleSnapshotError);
 
     const unsubRecipes = onSnapshot(recipesRef, (snapshot) => {
+      setDbError(null);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Recipe));
       setRecipes(data);
-    });
+    }, handleSnapshotError);
 
     const unsubMenu = onSnapshot(menuRef, (snapshot) => {
+      setDbError(null);
       const data = snapshot.docs.map(doc => {
          const d = doc.data();
          // Handle legacy format if any
@@ -113,7 +129,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
          } as MenuPlan;
       });
       setMenuPlans(data);
-    });
+    }, handleSnapshotError);
 
     return () => {
       unsubIngredients();
@@ -141,54 +157,76 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // --- CRUD Methods (Modular SDK) ---
+  // Note: We intentionally throw errors here so the UI components can catch them and display alerts.
 
   const addIngredient = async (ing: Ingredient) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'ingredients', ing.id), ing);
-    } catch (e) { console.error("Error adding ingredient", e); }
+    } catch (e: any) { 
+      console.error("Error adding ingredient", e); 
+      throw e; 
+    }
   };
 
   const updateIngredient = async (id: string, updates: Partial<Ingredient>) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'ingredients', id), updates, { merge: true });
-    } catch (e) { console.error("Error updating ingredient", e); }
+    } catch (e: any) { 
+      console.error("Error updating ingredient", e); 
+      throw e;
+    }
   };
 
   const deleteIngredient = async (id: string) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'ingredients', id));
-    } catch (e) { console.error("Error deleting ingredient", e); }
+    } catch (e: any) { 
+      console.error("Error deleting ingredient", e); 
+      throw e;
+    }
   };
 
   const addRecipe = async (recipe: Recipe) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'recipes', recipe.id), recipe);
-    } catch (e) { console.error("Error adding recipe", e); }
+    } catch (e: any) { 
+      console.error("Error adding recipe", e); 
+      throw e;
+    }
   };
 
   const updateRecipe = async (id: string, updates: Partial<Recipe>) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'recipes', id), updates, { merge: true });
-    } catch (e) { console.error("Error updating recipe", e); }
+    } catch (e: any) { 
+      console.error("Error updating recipe", e); 
+      throw e;
+    }
   };
 
   const deleteRecipe = async (id: string) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'recipes', id));
-    } catch (e) { console.error("Error deleting recipe", e); }
+    } catch (e: any) { 
+      console.error("Error deleting recipe", e); 
+      throw e;
+    }
   };
 
   const updateMenuPlan = async (plan: MenuPlan) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'menuPlans', plan.date), plan);
-    } catch (e) { console.error("Error updating menu", e); }
+    } catch (e: any) { 
+      console.error("Error updating menu", e); 
+      throw e;
+    }
   };
 
   const getRecipeById = (id: string) => recipes.find(r => r.id === id);
@@ -217,6 +255,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <AppContext.Provider value={{
       user,
       loading,
+      dbError,
       ingredients,
       recipes,
       menuPlans,

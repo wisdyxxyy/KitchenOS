@@ -51,6 +51,10 @@ export const Settings: React.FC = () => {
       if (err.code === 'auth/unauthorized-domain') {
         const domainToWhitelist = window.location.hostname || window.location.host || window.location.href;
         setError(`Domain not authorized. Please add "${domainToWhitelist}" to Firebase Console > Authentication > Settings > Authorized domains.`);
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('Login cancelled.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Google Sign-In is not enabled. Go to Firebase Console > Authentication > Sign-in method to enable it.');
       } else {
         setError(err.message.replace('Firebase: ', ''));
       }
@@ -71,7 +75,17 @@ export const Settings: React.FC = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message.replace('Firebase: ', ''));
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Account already exists. Please switch to "Sign In" to log in.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Email/Password login is not enabled. Go to Firebase Console > Authentication > Sign-in method to enable it.');
+      } else if (err.code === 'auth/wrong-password') {
+        setError('Incorrect password.');
+      } else if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email. Please sign up.');
+      } else {
+        setError(err.message.replace('Firebase: ', ''));
+      }
     } finally {
       setLoading(false);
     }
@@ -186,7 +200,7 @@ export const Settings: React.FC = () => {
 
              <div className="mt-4 text-center">
                <button 
-                 onClick={() => setIsRegistering(!isRegistering)}
+                 onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
                  className="text-sm text-indigo-600 font-medium hover:underline"
                >
                  {isRegistering ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}

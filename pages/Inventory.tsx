@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Ingredient, Unit } from '../types';
 import { CATEGORIES, UNITS } from '../constants';
-import { Plus, Search, Trash2, Edit2, AlertCircle, Filter, X } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, AlertCircle, Filter, X, Eye, EyeOff } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 export const Inventory: React.FC = () => {
@@ -21,7 +21,8 @@ export const Inventory: React.FC = () => {
     quantity: 1,
     unit: 'pcs',
     category: 'other',
-    lowStockThreshold: 1
+    lowStockThreshold: 1,
+    showInRestockList: true
   });
 
   // Auto-focus input when adding/editing starts
@@ -36,42 +37,48 @@ export const Inventory: React.FC = () => {
     i.name.trim().toLowerCase() === newItem.name!.trim().toLowerCase() && i.id !== editingId
   );
 
-  const handleSaveItem = () => {
+  const handleSaveItem = async () => {
     if (!newItem.name) return;
     if (isDuplicateName) {
       if (!confirm("An item with this name already exists. Do you want to continue?")) return;
     }
 
-    if (editingId) {
-       // Update Mode
-       updateIngredient(editingId, {
-         name: newItem.name,
-         quantity: Number(newItem.quantity),
-         unit: newItem.unit as Unit,
-         category: newItem.category as any,
-         lowStockThreshold: Number(newItem.lowStockThreshold)
-       });
-       setEditingId(null);
-    } else {
-       // Create Mode
-       const ing: Ingredient = {
-         id: uuidv4(),
-         name: newItem.name,
-         quantity: Number(newItem.quantity),
-         unit: newItem.unit as Unit,
-         category: newItem.category as any,
-         lowStockThreshold: Number(newItem.lowStockThreshold),
-         updatedAt: new Date().toISOString()
-       };
-       addIngredient(ing);
+    try {
+      if (editingId) {
+         // Update Mode
+         await updateIngredient(editingId, {
+           name: newItem.name,
+           quantity: Number(newItem.quantity),
+           unit: newItem.unit as Unit,
+           category: newItem.category as any,
+           lowStockThreshold: Number(newItem.lowStockThreshold),
+           showInRestockList: newItem.showInRestockList !== false
+         });
+         setEditingId(null);
+      } else {
+         // Create Mode
+         const ing: Ingredient = {
+           id: uuidv4(),
+           name: newItem.name,
+           quantity: Number(newItem.quantity),
+           unit: newItem.unit as Unit,
+           category: newItem.category as any,
+           lowStockThreshold: Number(newItem.lowStockThreshold),
+           showInRestockList: newItem.showInRestockList !== false,
+           updatedAt: new Date().toISOString()
+         };
+         await addIngredient(ing);
+      }
+      
+      setIsAdding(false);
+      setNewItem({ name: '', quantity: 1, unit: 'pcs', category: 'other', lowStockThreshold: 1, showInRestockList: true });
+    } catch (error) {
+      // Error is handled by AppContext / App.tsx global handler
     }
-    
-    setIsAdding(false);
-    setNewItem({ name: '', quantity: 1, unit: 'pcs', category: 'other', lowStockThreshold: 1 });
   };
 
   const startEdit = (item: Ingredient) => {
-    setNewItem({ ...item });
+    setNewItem({ ...item, showInRestockList: item.showInRestockList !== false });
     setEditingId(item.id);
     setIsAdding(true);
     // Scroll to top
@@ -81,7 +88,7 @@ export const Inventory: React.FC = () => {
   const cancelEdit = () => {
     setIsAdding(false);
     setEditingId(null);
-    setNewItem({ name: '', quantity: 1, unit: 'pcs', category: 'other', lowStockThreshold: 1 });
+    setNewItem({ name: '', quantity: 1, unit: 'pcs', category: 'other', lowStockThreshold: 1, showInRestockList: true });
   };
 
   const filteredIngredients = ingredients.filter(i => {
@@ -181,7 +188,24 @@ export const Inventory: React.FC = () => {
               />
             </div>
           </div>
-          <div className="mt-4 flex justify-end gap-2">
+          
+          <div className="mt-4 flex items-center">
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${newItem.showInRestockList !== false ? 'bg-emerald-600 border-emerald-600' : 'bg-white border-slate-300'}`}>
+                 {newItem.showInRestockList !== false && <X className="text-white rotate-45" size={12} strokeWidth={4} />}
+              </div>
+              <input 
+                type="checkbox" 
+                className="hidden"
+                checked={newItem.showInRestockList !== false}
+                onChange={e => setNewItem({...newItem, showInRestockList: e.target.checked})}
+              />
+              <span className="text-sm text-slate-700 font-medium group-hover:text-emerald-700 transition-colors">Show in Dashboard Restock List</span>
+            </label>
+            <span className="ml-2 text-xs text-slate-400">If unchecked, low stock warnings will be hidden.</span>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2">
             <button onClick={cancelEdit} className="px-4 py-2 text-slate-500 hover:bg-slate-50 rounded-lg">Cancel</button>
             <button onClick={handleSaveItem} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
               {editingId ? 'Update Item' : 'Save Item'}
@@ -245,7 +269,16 @@ export const Inventory: React.FC = () => {
 
                  return (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-4 font-medium text-slate-800">{item.name}</td>
+                    <td className="p-4 font-medium text-slate-800">
+                      <div className="flex items-center gap-2">
+                        {item.name}
+                        {item.showInRestockList === false && (
+                          <span title="Hidden from Restock List" className="text-slate-400">
+                            <EyeOff size={14} />
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-4">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${cat?.color}`}>
                         {cat?.label}

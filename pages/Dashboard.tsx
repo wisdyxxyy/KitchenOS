@@ -15,8 +15,18 @@ export const Dashboard: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
   const todaysMenu = menuPlans.find(p => p.date === today);
   
-  const lowStockItems = ingredients.filter(i => i.quantity <= i.lowStockThreshold && i.quantity > 0);
-  const outOfStockItems = ingredients.filter(i => i.quantity === 0);
+  // Filter for dashboard stats: Low Stock & Out of Stock
+  // Explicitly check for showInRestockList !== false (default is true if undefined)
+  const lowStockItems = ingredients.filter(i => 
+    i.quantity <= i.lowStockThreshold && 
+    i.quantity > 0 &&
+    i.showInRestockList !== false
+  );
+  
+  const outOfStockItems = ingredients.filter(i => 
+    i.quantity === 0 &&
+    i.showInRestockList !== false
+  );
 
   const lunchRecipes = (todaysMenu?.lunchRecipeIds || []).map(id => getRecipeById(id)).filter(Boolean);
   const dinnerRecipes = (todaysMenu?.dinnerRecipeIds || []).map(id => getRecipeById(id)).filter(Boolean);

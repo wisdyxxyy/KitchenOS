@@ -14,6 +14,7 @@ export interface Ingredient {
   unit: Unit;
   category: 'vegetable' | 'meat' | 'spice' | 'grain' | 'dairy' | 'other';
   lowStockThreshold: number;
+  showInRestockList?: boolean; // Controls visibility in Dashboard restock alerts
   updatedAt: string;
 }
 
