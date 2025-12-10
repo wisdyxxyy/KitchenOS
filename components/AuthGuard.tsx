@@ -1,12 +1,10 @@
 
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Navigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useApp();
-  const location = useLocation();
+  const { loading } = useApp();
 
   if (loading) {
     return (
@@ -16,13 +14,6 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
     );
   }
 
-  if (!user) {
-    // Redirect to settings (where login form is) if trying to access other pages
-    // Exception: We are using Settings page as the Login page for this simple app structure
-    if (location.pathname !== '/settings') {
-        return <Navigate to="/settings" replace />;
-    }
-  }
-
+  // Auth requirement removed. Always render children.
   return <>{children}</>;
 };

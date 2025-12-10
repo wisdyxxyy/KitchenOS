@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Ingredient, Unit } from '../types';
@@ -89,6 +90,13 @@ export const Inventory: React.FC = () => {
     setIsAdding(false);
     setEditingId(null);
     setNewItem({ name: '', quantity: 1, unit: 'pcs', category: 'other', lowStockThreshold: 1, showInRestockList: true });
+  };
+
+  const toggleRestockVisibility = async (e: React.MouseEvent, item: Ingredient) => {
+    e.stopPropagation();
+    // Default is true, so if it's currently false, we set to true. Otherwise set to false.
+    const newValue = item.showInRestockList === false; 
+    await updateIngredient(item.id, { showInRestockList: newValue });
   };
 
   const filteredIngredients = ingredients.filter(i => {
@@ -272,11 +280,13 @@ export const Inventory: React.FC = () => {
                     <td className="p-4 font-medium text-slate-800">
                       <div className="flex items-center gap-2">
                         {item.name}
-                        {item.showInRestockList === false && (
-                          <span title="Hidden from Restock List" className="text-slate-400">
-                            <EyeOff size={14} />
-                          </span>
-                        )}
+                        <button
+                          onClick={(e) => toggleRestockVisibility(e, item)}
+                          className={`p-1 rounded hover:bg-slate-200 transition-colors ${item.showInRestockList === false ? 'text-slate-400' : 'text-emerald-500/50 hover:text-emerald-600'}`}
+                          title={item.showInRestockList === false ? "Hidden from Dashboard (Click to show)" : "Visible on Dashboard (Click to hide)"}
+                        >
+                          {item.showInRestockList === false ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
                       </div>
                     </td>
                     <td className="p-4">
