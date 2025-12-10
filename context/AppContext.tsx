@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Ingredient, Recipe, MenuPlan, User } from '../types';
 import { db } from '../firebaseConfig'; // Removed auth
@@ -12,7 +11,6 @@ import {
 
 interface AppContextType {
   user: User | null;
-  loading: boolean;
   dbError: string | null;
   ingredients: Ingredient[];
   recipes: Recipe[];
@@ -48,7 +46,6 @@ const SHARED_USER: User = {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Always logged in as the shared user
   const [user] = useState<User | null>(SHARED_USER);
-  const [loading, setLoading] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -178,7 +175,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider value={{
       user,
-      loading,
       dbError,
       ingredients,
       recipes,
